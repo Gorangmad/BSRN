@@ -15,7 +15,14 @@ def create_bingo_card(height, width, wordfile):
     
     return card
 
-# Funktion zur Überprüfung, ob beide auf dasselbe Spiel zugreifen können
+# Funktion zur Überprüfung, ob genug Spieler für das Spiel vorhanden sind
+def enough_players(roundfile):
+    with open(roundfile, 'r') as f:
+        players = f.readlines()
+    
+    return len(players) >= 2
+
+# Funktion zum Überprüfen, ob beide auf dasselbe Spiel zugreifen können
 def check_access(roundfile, player_name):
     if not os.path.exists(roundfile):
         print("Spiel nicht gefunden.")
@@ -87,6 +94,12 @@ def main():
         join_game()
     else:
         print("Ungültige Auswahl.")
+
+    # Überprüfen, ob genug Spieler für das Spiel vorhanden sind
+    if enough_players(roundfile):
+        print("Spiel kann starten!")
+    else:
+        print("Warten auf einen weiteren Spieler...")
 
 if __name__ == "__main__":
     main()
