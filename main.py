@@ -3,28 +3,89 @@ import random
 import time
 import win32pipe
 import win32file
-import pywintypes
+import typer
+
 
 # Function to create a bingo card
-def create_bingo_card(height, width, wordfile):
+def create_bingo_card(height, width, words):
     try:
-        with open(wordfile, 'r') as f:
-            words = [line.strip() for line in f.readlines()]
-
-
         if len(words) < height * width:
             print("Not enough words in the word file.")
             return None
 
-
         random.shuffle(words)
-        card = [words[i: i + width] for i in range(0, height * width, width)]
-
+        card = []
+        for _ in range(height):
+            row = []
+            for _ in range(width):
+                row.append(words.pop())
+            card.append(row)
 
         return card
     except Exception as e:
         print("Error creating bingo card:", e)
         return None
+
+
+# Function to read bingo cards from the round file
+def read_bingo_cards(roundfile):
+    try:
+        with open(roundfile, 'r') as f:
+            lines = f.readlines()
+
+            # Extract height and width
+            height, width = None, None
+            for line in lines:
+                if line.startswith("Height:"):
+                    height = int(line.split(":", 1)[1].strip())
+                elif line.startswith("Width:"):
+                    width = int(line.split(":", 1)[1].strip())
+
+            if height is None or width is None:
+                print("Height or width not found in the round file.")
+                return None
+
+            # Extract the name of the word file
+            wordfile = None
+            for line in lines:
+                if line.startswith("Wordfile:"):
+                    wordfile = line.split(":", 1)[1].strip()
+                    break
+
+            # If wordfile is not found, return None
+            if wordfile is None:
+                print("Wordfile not found in the round file.")
+                return None
+
+            # Read words from the wordfile
+            with open(wordfile, 'r') as word_file:
+                words = [line.strip() for line in word_file.readlines()]
+
+            # Check if enough words are available
+            if len(words) < height * width:
+                print("Not enough words in the word file.")
+                return None
+
+            # Create bingo cards
+            cards = create_bingo_card(height, width, words)
+
+
+            return cards
+    except Exception as e:
+        print("Error reading bingo cards:", e)
+        return None
+
+
+# Function to display bingo cards in the terminal
+def display_bingo_cards(cards):
+    try:
+        for card in cards:
+            typer.echo(" ".join(card))
+        typer.echo()  # Add a blank line between cards
+    except Exception as e:
+        print("Error displaying bingo cards:", e)
+
+
 
 # Function to check if there are enough players for the game
 def enough_players(roundfile):
@@ -32,10 +93,9 @@ def enough_players(roundfile):
         with open(roundfile, 'r') as f:
             players = [line.strip() for line in f.readlines()]
 
-
         num_players = sum(1 for player in players if player.startswith("player:"))
 
-            return num_players >= 2
+        return num_players >= 2
     except Exception as e:
         print("Error checking players:", e)
         return False
@@ -47,15 +107,12 @@ def check_access(roundfile, player_name):
             print("Game not found.")
             return False
 
-
         with open(roundfile, 'r') as f:
             players = f.readlines()
 
-
         if player_name + '\n' in players:
-print("Player name already taken.")
+            print("Player name already taken.")
             return False
-
 
         return True
     except Exception as e:
@@ -71,24 +128,20 @@ def create_player(roundfile, player_name):
     except Exception as e:
         print("Error creating player:", e)
 
-# Function to create a round file
 def create_round_file(roundfile, height, width, wordfile, max_players):
     try:
-        card = create_bingo_card(height, width, wordfile)
-        if card is None:
-            return False
-
 
         with open(roundfile, 'w') as f:
-            f.write(f"{height} {width}\n")
-            for row in card:
-                f.write(" ".join(row) + '\n')
-            f.write(f"{max_players}\n")
+            f.write(f"Max: {max_players}\n")  # Write max players
+            f.write(f"Height: {height}\n")  # Write height and width
+            f.write(f"Width: {width}\n")  # Write height and width
+            f.write(f"Wordfile: {wordfile}\n")
         print("Round file created successfully.")
         return True
     except Exception as e:
         print("Error creating round file:", e)
         return False
+
 
 # Function to create a new game
 def create_game():
@@ -125,7 +178,7 @@ def join_game():
             return None, None
 
         # Return the pipe name as well
-return roundfile, r'\\.\pipe\bingo_pipe'
+        return roundfile, r'\\.\pipe\bingo_pipe'
     except Exception as e:
         print("Error joining game:", e)
         return None, None
@@ -172,6 +225,10 @@ def main():
                     0,
                     None
                 )
+                # Display bingo cards for both players after they join the game
+                cards = read_bingo_cards(roundfile)
+                if cards:
+                    display_bingo_cards(cards)
                 # Since the second player joins, it doesn't need to check for the second player again
                 return
         else:
@@ -182,10 +239,14 @@ def main():
             return
 
         # Check if both players have joined the game
-while True:
+        while True:
             print("Waiting for another player...")
             if check_second_player_joined(pipe):
                 print("Another player has joined the game.")
+                # Display bingo cards for both players after they join the game
+                cards = read_bingo_cards(roundfile)
+                if cards:
+                    display_bingo_cards(cards)
                 break
             else:
                 print("Unable to connect to another player. Retrying...")
@@ -193,5 +254,5 @@ while True:
     except Exception as e:
         print("Error in main function:", e)
 
-if _name_ == "_main_":
+if name == "main":
     main()
