@@ -52,6 +52,8 @@ def cleanup_message_queue(mq, name):
     except Exception as e:
         logging.error(f"Error cleaning up message queue: {e}")
 
+
+
 def wait_for_opponent(mq_name, start_event, init_mq):
     logging.debug("Waiting for opponent to join...")
     try:
@@ -81,16 +83,19 @@ def start_message_listener(mq_name, game_won_event):
 
 def create_bingo_card(height, width, words):
     try:
-        if len(words) < height * width:
+        if len(words) < height * width - 1:  # subtract 1 for the Joker
             print("Not enough words in the word file.")
             return None
 
         random.shuffle(words)
         card = []
-        for _ in range(height):
+        for i in range(height):
             row = []
-            for _ in range(width):
-                row.append(words.pop())
+            for j in range(width):
+                if (height % 2 != 0 and width % 2 != 0) and (i == height // 2 and j == width // 2):
+                    row.append("JOKER")
+                else:
+                    row.append(words.pop())
             card.append(row)
 
         return card
@@ -151,7 +156,7 @@ def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_
 
         col_width = 15
         cursor_idx = (0, 0)
-        selected_indices = set()
+        selected_indices = {(len(cards) // 2, len(cards[0]) // 2)} if len(cards) % 2 != 0 else set()  # include Joker if odd-sized card
 
         while not game_won_event.is_set():
             stdscr.clear()
@@ -330,7 +335,6 @@ def main():
                     all_player_queues = [create_message_queue(f"/mq_{name}") for name in player_queues]
                     start_message_listener(mq_name, game_won_event)
                     display_bingo_cards(cards, init_mq_name, player_name, game_won_event, all_player_queues)
-                    
 
         elif choice == '2':
             roundfile, mq_name, player_name = join_game(init_mq_name)
@@ -341,7 +345,7 @@ def main():
                         player_queues = [line.split(":")[1].strip() for line in f if line.startswith("player:")]
                     all_player_queues = [create_message_queue(f"/mq_{name}") for name in player_queues]
                     start_message_listener(mq_name, game_won_event)
-                    display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_queues) 
+                    display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_queues)
         else:
             print("Invalid choice.")
             return
@@ -353,7 +357,5 @@ def main():
     finally:
         pass
 
-
 if _name_ == "_main_":
     main()
-
