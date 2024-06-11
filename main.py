@@ -194,15 +194,17 @@ def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_
                     selected_indices.remove(cursor_idx)
                 else:
                     selected_indices.add(cursor_idx)
+                    log_message(log_file, f"{cards[cursor_idx[0]][cursor_idx[1]]} ({cursor_idx[0]}/{cursor_idx[1]})")
                 if check_win(cards, selected_indices):
                     if not game_won_event.is_set():
                         for queue in all_player_queues:
                             send_message(queue, f"{player_name} won")
                         game_won_event.set()
-                        log_message(log_file, "Spiel gewonnen")
+                        log_message(log_file, "Sieg")
                         logging.debug("Game won, breaking display loop.")
                         break
             elif key == 27:  # Esc key
+                log_message(log_file, "Abbruch")
                 break
 
     except Exception as e:
@@ -212,6 +214,7 @@ def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_
         curses.nocbreak()
         stdscr.keypad(False)
         curses.endwin()
+        log_message(log_file, "Ende des Spiels")
 
 def check_win(cards, selected_indices):
     n = len(cards)
@@ -375,4 +378,4 @@ def main():
 
 
 if _name_ == "_main_":
-    main()
+    main()
