@@ -6,6 +6,7 @@ import curses
 from multiprocessing import Event
 import posix_ipc
 import time
+from datetime import datetime
 
 # Konfigurieren des Loggings für detaillierte Ausgaben
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -51,8 +52,6 @@ def cleanup_message_queue(mq, name):
         mq.unlink()
     except Exception as e:
         logging.error(f"Error cleaning up message queue: {e}")
-
-
 
 def wait_for_opponent(mq_name, start_event, init_mq):
     logging.debug("Waiting for opponent to join...")
@@ -143,6 +142,10 @@ def read_bingo_cards(roundfile):
         return None
 
 def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_queues):
+    log_file = create_log_file(player_name)
+    log_message(log_file, "Start des Spiels")
+    log_message(log_file, f"Größe des Spielfelds: {len(cards[0])}x{len(cards)}")
+    
     try:
         stdscr = curses.initscr()
         curses.noecho()
@@ -196,6 +199,7 @@ def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_
                         for queue in all_player_queues:
                             send_message(queue, f"{player_name} won")
                         game_won_event.set()
+                        log_message(log_file, "Spiel gewonnen")
                         logging.debug("Game won, breaking display loop.")
                         break
             elif key == 27:  # Esc key
@@ -308,6 +312,17 @@ def join_game(init_mq_name):
         logging.error(f"Error joining game: {e}")
         return None, None, None
 
+def create_log_file(player_name):
+    current_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    log_filename = f"{current_time}-bingo-{player_name}.txt"
+    log_filepath = os.path.join(os.getcwd(), log_filename)
+    return log_filepath
+
+def log_message(log_filepath, message):
+    current_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    with open(log_filepath, 'a') as log_file:
+        log_file.write(f"{current_time} {message}\n")
+
 def main():
     init_mq_name = "/init_queue"  # Common initialization queue
     init_mq = create_message_queue(init_mq_name, max_message_size=1024)  # Create it here for global usage
@@ -335,6 +350,7 @@ def main():
                     all_player_queues = [create_message_queue(f"/mq_{name}") for name in player_queues]
                     start_message_listener(mq_name, game_won_event)
                     display_bingo_cards(cards, init_mq_name, player_name, game_won_event, all_player_queues)
+                    
 
         elif choice == '2':
             roundfile, mq_name, player_name = join_game(init_mq_name)
@@ -345,7 +361,7 @@ def main():
                         player_queues = [line.split(":")[1].strip() for line in f if line.startswith("player:")]
                     all_player_queues = [create_message_queue(f"/mq_{name}") for name in player_queues]
                     start_message_listener(mq_name, game_won_event)
-                    display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_queues)
+                    display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_queues) 
         else:
             print("Invalid choice.")
             return
@@ -356,6 +372,7 @@ def main():
         logging.error(f"Error in main function: {e}")
     finally:
         pass
+
 
 if _name_ == "_main_":
     main()
