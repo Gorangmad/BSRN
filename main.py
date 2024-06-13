@@ -284,26 +284,38 @@ def get_input(prompt, input_type=str, valid_range=None, valid_options=None):
             print(e)
 
 def create_game():
-    try:
-        roundfile = get_input("Please enter the name of the round file: ")
-        player_name = get_input("Please enter your player name: ")
+    while True:
+        try:
+            roundfile = get_input("Please enter the name of the round file: ")
+            if os.path.exists(roundfile):
+                print("A round file with this name already exists. Please choose a different name.")
+                continue
 
-        height = get_input("Please enter the height of the bingo cards: ", int, valid_range=range(1, 101))
-        width = get_input("Please enter the width of the bingo cards: ", int, valid_range=range(1, 101))
-        wordfile = get_input("Please enter the name of the word file: ")
-        max_players = get_input("Please enter the maximum number of players: ", int, valid_range=range(2, 11))
+            player_name = get_input("Please enter your player name: ")
 
-        if create_round_file(roundfile, height, width, wordfile, max_players):
-            create_player(roundfile, player_name)
-            mq_name = "/mq_" + player_name
-            create_message_queue(mq_name)
-            return roundfile, mq_name, player_name
-        else:
-            print("Error creating the round file.")
+            height = get_input("Please enter the height of the bingo cards: ", int, valid_range=range(1, 101))
+            width = get_input("Please enter the width of the bingo cards: ", int, valid_range=range(1, 101))
+            wordfile = get_input("Please enter the name of the word file: ")
+            max_players = get_input("Please enter the maximum number of players: ", int, valid_range=range(2, 11))
+
+            if create_round_file(roundfile, height, width, wordfile, max_players):
+                with open(wordfile, 'r') as word_file:
+                    words = [line.strip() for line in word_file.readlines()]
+                
+                if len(words) < height * width:
+                    print(f"Not enough words in the word file.")
+                    continue
+                
+                create_player(roundfile, player_name)
+                mq_name = "/mq_" + player_name
+                create_message_queue(mq_name)
+                return roundfile, mq_name, player_name
+            else:
+                print("Error creating the round file.")
+                return None, None, None
+        except Exception as e:
+            logging.error(f"Error creating game: {e}")
             return None, None, None
-    except Exception as e:
-        logging.error(f"Error creating game: {e}")
-        return None, None, None
 
 def join_game(init_mq_name):
     try:
