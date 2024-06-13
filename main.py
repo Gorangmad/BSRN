@@ -317,8 +317,10 @@ def join_game(init_mq_name):
 
 def create_log_file(player_name):
     current_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    log_folder = os.path.join(os.getcwd(), 'logfiles')
+    os.makedirs(log_folder, exist_ok=True)  # Avoid error if directory already exists
     log_filename = f"{current_time}-bingo-{player_name}.txt"
-    log_filepath = os.path.join(os.getcwd(), log_filename)
+    log_filepath = os.path.join(log_folder, log_filename)
     return log_filepath
 
 def log_message(log_filepath, message):
@@ -378,4 +380,4 @@ def main():
 
 
 if _name_ == "_main_":
-    main()
+    main()
