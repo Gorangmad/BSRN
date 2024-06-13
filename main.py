@@ -271,15 +271,27 @@ def create_round_file(roundfile, height, width, wordfile, max_players):
         logging.error(f"Error creating round file: {e}")
         return False
 
+def get_input(prompt, input_type=str, valid_range=None, valid_options=None):
+    while True:
+        try:
+            user_input = input_type(input(prompt).strip())
+            if valid_range and user_input not in valid_range:
+                raise ValueError(f"Input must be within range: {valid_range}")
+            if valid_options and user_input not in valid_options:
+                raise ValueError(f"Input must be one of: {valid_options}")
+            return user_input
+        except ValueError as e:
+            print(e)
+
 def create_game():
     try:
-        roundfile = input("Please enter the name of the round file: ")
-        player_name = input("Please enter your player name: ")
+        roundfile = get_input("Please enter the name of the round file: ")
+        player_name = get_input("Please enter your player name: ")
 
-        height = int(input("Please enter the height of the bingo cards: "))
-        width = int(input("Please enter the width of the bingo cards: "))
-        wordfile = input("Please enter the name of the word file: ")
-        max_players = int(input("Please enter the maximum number of players: "))
+        height = get_input("Please enter the height of the bingo cards: ", int, valid_range=range(1, 101))
+        width = get_input("Please enter the width of the bingo cards: ", int, valid_range=range(1, 101))
+        wordfile = get_input("Please enter the name of the word file: ")
+        max_players = get_input("Please enter the maximum number of players: ", int, valid_range=range(2, 11))
 
         if create_round_file(roundfile, height, width, wordfile, max_players):
             create_player(roundfile, player_name)
@@ -295,8 +307,8 @@ def create_game():
 
 def join_game(init_mq_name):
     try:
-        roundfile = input("Please enter the name of the round file: ")
-        player_name = input("Please enter your player name: ")
+        roundfile = get_input("Please enter the name of the round file: ")
+        player_name = get_input("Please enter your player name: ")
 
         if not os.path.exists(roundfile):
             print("Game not found.")
@@ -338,9 +350,9 @@ def main():
 
     try:
         print("Welcome to Multiplayer Bingo!")
-        choice = input("Would you like to create a game (1) or join a game (2)? ")
+        choice = get_input("Would you like to create a game (1) or join a game (2)? ", int, valid_options={1, 2})
 
-        if choice == '1':
+        if choice == 1:
             roundfile, mq_name, player_name = create_game()
             if roundfile:
                 print("Waiting for another player to join...")
@@ -359,7 +371,7 @@ def main():
                     display_bingo_cards(cards, init_mq_name, player_name, game_won_event, all_player_queues)
                     
 
-        elif choice == '2':
+        elif choice == 2:
             roundfile, mq_name, player_name = join_game(init_mq_name)
             if roundfile:
                 cards = read_bingo_cards(roundfile)
