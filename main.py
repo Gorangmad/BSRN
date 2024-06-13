@@ -164,20 +164,22 @@ def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_
         while not game_won_event.is_set():
             stdscr.clear()
 
-            for row, card_row in enumerate(cards):
-                for col, word in enumerate(card_row):
+            for row in range(len(cards)):
+                for col in range(len(cards[0])):
+                    word = cards[row][col]
                     word_to_display = word[:col_width]
                     padding = " " * (col_width - len(word_to_display))
                     if (row, col) == cursor_idx:
-                        stdscr.addstr(f"{word_to_display}{padding}", curses.color_pair(1))
+                        stdscr.addstr(f"| {word_to_display}{padding} ", curses.color_pair(1))
                     elif (row, col) in selected_indices:
-                        stdscr.addstr(f"{word_to_display}{padding}", curses.color_pair(2) | curses.A_BOLD)
+                        stdscr.addstr(f"| {word_to_display}{padding} ", curses.color_pair(2) | curses.A_BOLD)
                     else:
-                        stdscr.addstr(f"{word_to_display}{padding}")
-                    if col < len(card_row) - 1:
-                        stdscr.addstr("  ")
+                        stdscr.addstr(f"| {word_to_display}{padding} ")
+                stdscr.addstr("|\n")
 
-                stdscr.addstr("\n")
+                # Draw horizontal line between rows
+                if row < len(cards) - 1:
+                    stdscr.addstr("+" + ("-" * (col_width + 2) + "+") * len(cards[0]) + "\n")
 
             stdscr.refresh()
             key = stdscr.getch()
