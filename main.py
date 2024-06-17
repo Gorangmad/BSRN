@@ -64,19 +64,26 @@ def wait_for_opponent(mq_name, start_event, init_mq):
     except Exception as e:
         logging.error(f"Error in wait_for_opponent: {e}")
 
-def listen_for_messages(mq, game_won_event):
+def listen_for_messages(mq, game_won_event, player_queues, players):
     while not game_won_event.is_set():
         try:
             message = receive_message(mq)
-            if message and "won" in message:
-                game_won_event.set()
-                logging.debug("Game won message received.")
+            if message:
+                if "won" in message:
+                    game_won_event.set()
+                    logging.debug("Game won message received.")
+                elif "player joined" in message:
+                    new_player = message.split(":")[1].strip()
+                    if new_player not in players:
+                        players.append(new_player)
+                        for queue in player_queues:
+                            send_message(queue, message)
         except Exception as e:
             logging.error(f"Error in listen_for_messages: {e}")
 
-def start_message_listener(mq_name, game_won_event):
+def start_message_listener(mq_name, game_won_event, player_queues, players):
     mq = create_message_queue(mq_name)
-    listener_thread = threading.Thread(target=listen_for_messages, args=(mq, game_won_event))
+    listener_thread = threading.Thread(target=listen_for_messages, args=(mq, game_won_event, player_queues, players))
     listener_thread.start()
     return listener_thread
 
@@ -141,10 +148,24 @@ def read_bingo_cards(roundfile):
         logging.error(f"Error reading bingo cards: {e}")
         return None
 
-def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_queues):
+
+
+def read_players_from_roundfile(roundfile):
+    try:
+        with open(roundfile, 'r') as f:
+            lines = f.readlines()
+        players = [line.split(":", 1)[1].strip() for line in lines if line.startswith("player:")]
+        return players
+    except Exception as e:
+        logging.error(f"Error reading players from round file: {e}")
+        return []
+
+def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_queues, roundfile):
     log_file = create_log_file(player_name)
     log_message(log_file, "Start des Spiels")
     log_message(log_file, f"Größe des Spielfelds: {len(cards[0])}x{len(cards)}")
+    
+    players = read_players_from_roundfile(roundfile)
     
     try:
         stdscr = curses.initscr()
@@ -164,6 +185,13 @@ def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_
         while not game_won_event.is_set():
             stdscr.clear()
 
+            # Display player names
+            stdscr.addstr("Players in the game:\n", curses.A_BOLD)
+            for player in players:
+                stdscr.addstr(f"{player}\n")
+            stdscr.addstr("\n")  # Add an empty line for spacing
+
+            # Draw the bingo card
             for row in range(len(cards)):
                 for col in range(len(cards[0])):
                     word = cards[row][col]
@@ -217,6 +245,7 @@ def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_
         stdscr.keypad(False)
         curses.endwin()
         log_message(log_file, "Ende des Spiels")
+
 
 def check_win(cards, selected_indices):
     n = len(cards)
@@ -336,6 +365,12 @@ def join_game(init_mq_name):
         # Signal readiness
         send_message(posix_ipc.MessageQueue(init_mq_name), 'start')
         
+        # Notify other players about the new player
+        with open(roundfile, 'r') as f:
+            player_queues = [line.split(":")[1].strip() for line in f if line.startswith("player:")]
+        for queue_name in player_queues:
+            send_message(create_message_queue(f"/mq_{queue_name}"), f"player joined: {player_name}")
+        
         return roundfile, mq_name, player_name
     except Exception as e:
         logging.error(f"Error joining game: {e}")
@@ -379,8 +414,8 @@ def main():
                     with open(roundfile, 'r') as f:
                         player_queues = [line.split(":")[1].strip() for line in f if line.startswith("player:")]
                     all_player_queues = [create_message_queue(f"/mq_{name}") for name in player_queues]
-                    start_message_listener(mq_name, game_won_event)
-                    display_bingo_cards(cards, init_mq_name, player_name, game_won_event, all_player_queues)
+                    start_message_listener(mq_name, game_won_event, all_player_queues, player_queues)
+                    display_bingo_cards(cards, init_mq_name, player_name, game_won_event, all_player_queues, roundfile)
                     
 
         elif choice == 2:
@@ -391,8 +426,8 @@ def main():
                     with open(roundfile, 'r') as f:
                         player_queues = [line.split(":")[1].strip() for line in f if line.startswith("player:")]
                     all_player_queues = [create_message_queue(f"/mq_{name}") for name in player_queues]
-                    start_message_listener(mq_name, game_won_event)
-                    display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_queues) 
+                    start_message_listener(mq_name, game_won_event, all_player_queues, player_queues)
+                    display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_queues, roundfile) 
         else:
             print("Invalid choice.")
             return
@@ -405,5 +440,5 @@ def main():
         pass
 
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     main()
