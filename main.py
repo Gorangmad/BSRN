@@ -92,7 +92,6 @@ def create_bingo_card(height, width, words):
         if len(words) < height * width - 1:  # subtract 1 for the Joker
             print("Not enough words in the word file.")
             return None
-
         random.shuffle(words)
         card = []
         for i in range(height):
@@ -148,8 +147,6 @@ def read_bingo_cards(roundfile):
         logging.error(f"Error reading bingo cards: {e}")
         return None
 
-
-
 def read_players_from_roundfile(roundfile):
     try:
         with open(roundfile, 'r') as f:
@@ -177,10 +174,18 @@ def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_
         curses.init_pair(1, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
         curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
         curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_WHITE)
+        curses.init_pair(4, curses.COLOR_GREEN, curses.COLOR_BLACK)
+        curses.init_pair(5, curses.COLOR_YELLOW, curses.COLOR_BLACK)
 
         col_width = 15
         cursor_idx = (0, 0)
         selected_indices = {(len(cards) // 2, len(cards[0]) // 2)} if len(cards) % 2 != 0 else set()  # include Joker if odd-sized card
+
+        flicker = False
+
+        def toggle_flicker():
+            nonlocal flicker
+            flicker = not flicker
 
         while not game_won_event.is_set():
             stdscr.clear()
@@ -237,6 +242,38 @@ def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_
                 log_message(log_file, "Abbruch")
                 break
 
+        # Flicker the card when game is won
+        flicker_start_time = time.time()
+        while time.time() - flicker_start_time < 3:
+            stdscr.clear()
+            stdscr.addstr("Players in the game:\n", curses.A_BOLD)
+            for player in players:
+                stdscr.addstr(f"{player}\n")
+            stdscr.addstr("\n")  # Add an empty line for spacing
+
+            # Draw the bingo card with flickering effect
+            for row in range(len(cards)):
+                for col in range(len(cards[0])):
+                    word = cards[row][col]
+                    word_to_display = word[:col_width]
+                    padding = " " * (col_width - len(word_to_display))
+                    color_pair = 4 if flicker else 5  # Alternate between green and yellow
+                    if (row, col) == cursor_idx:
+                        stdscr.addstr(f"| {word_to_display}{padding} ", curses.color_pair(color_pair))
+                    elif (row, col) in selected_indices:
+                        stdscr.addstr(f"| {word_to_display}{padding} ", curses.color_pair(2) | curses.A_BOLD)
+                    else:
+                        stdscr.addstr(f"| {word_to_display}{padding} ")
+                stdscr.addstr("|\n")
+
+                # Draw horizontal line between rows
+                if row < len(cards) - 1:
+                    stdscr.addstr("+" + ("-" * (col_width + 2) + "+") * len(cards[0]) + "\n")
+
+            stdscr.refresh()
+            time.sleep(0.5)
+            toggle_flicker()
+
     except Exception as e:
         logging.error(f"Error displaying bingo cards: {e}")
     finally:
@@ -245,7 +282,6 @@ def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_
         stdscr.keypad(False)
         curses.endwin()
         log_message(log_file, "Ende des Spiels")
-
 
 def check_win(cards, selected_indices):
     n = len(cards)
@@ -306,7 +342,7 @@ def get_input(prompt, input_type=str, valid_range=None, valid_options=None):
             user_input = input_type(input(prompt).strip())
             if valid_range and user_input not in valid_range:
                 raise ValueError(f"Input must be within range: {valid_range}")
-            if valid_options and user_input not in valid_options:
+            if valid_options and user_input not in valid_options :
                 raise ValueError(f"Input must be one of: {valid_options}")
             return user_input
         except ValueError as e:
@@ -439,6 +475,5 @@ def main():
     finally:
         pass
 
-
-if __name__ == "__main__":
+if _name_ == "_main_":
     main()
