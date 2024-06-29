@@ -415,9 +415,12 @@ def main():
                 print("Zum Erstellen eines Spiels sind die Argumente --xaxis, --yaxis, --wordfile und --max_players erforderlich.")
                 return
 
-            if os.path.exists(args.roundfile):
-                print("Eine Rundendatei mit diesem Namen existiert bereits. Bitte wähle einen anderen Namen.")
-                return
+            while True:
+                if os.path.exists(args.roundfile):
+                    print("Eine Rundendatei mit diesem Namen existiert bereits. Bitte wähle einen anderen Namen.")
+                    args.roundfile = get_input("Name der Rundendatei: ")
+                else:
+                    break
 
             height = args.yaxis
             width = args.xaxis
@@ -426,23 +429,29 @@ def main():
             player_name = args.player_name
             roundfile = args.roundfile
 
-            while not os.path.exists(wordfile):
-                print(f"Datei nicht gefunden: {wordfile}.")
-                choice = get_input("Möchtest du den Dateipfad erneut eingeben (ja) oder die Standard-Buzzwords-Datei verwenden (nein)? ", str, valid_options={"ja", "nein"})
-                if choice == "ja":
-                    wordfile = get_input("Bitte gib den Pfad zu deiner Wortdatei ein: ")
-                else:
-                    wordfile = "buzzwords"  # Ersetze dies durch den Pfad zu deiner Standard-Wortdatei
-                    break
+            while True:
+                while not os.path.exists(wordfile):
+                    print(f"Datei nicht gefunden: {wordfile}.")
+                    choice = get_input("Möchtest du den Dateipfad erneut eingeben (ja) oder die Standard-Buzzwords-Datei verwenden (nein)? ", str, valid_options={"ja", "nein"})
+                    if choice == "ja":
+                        wordfile = get_input("Bitte gib den Pfad zu deiner Wortdatei ein: ")
+                    else:
+                        wordfile = "buzzwords"  # Ersetze dies durch den Pfad zu deiner Standard-Wortdatei
+                        break
 
-            if create_round_file(roundfile, height, width, wordfile, max_players):
                 with open(wordfile, 'r') as word_file:
                     words = [line.strip() for line in word_file.readlines()]
 
                 if len(words) < height * width:
                     print(f"Nicht genügend Wörter in der Wortdatei.")
-                    return
+                    width = get_input("Anzahl der Spalten der Bingokarte: ", int)
+                    height = get_input("Anzahl der Zeilen der Bingokarte: ", int)
+                else:
+                    break
 
+
+            if create_round_file(roundfile, height, width, wordfile, max_players):
+  
                 create_player(roundfile, player_name)
                 mq_name = "/mq_" + player_name
                 create_message_queue(mq_name)
@@ -464,6 +473,10 @@ def main():
         elif args.action == 'join':
             roundfile = args.roundfile
             player_name = args.player_name
+
+            while not roundfile or not os.path.exists(roundfile):
+                print("Rundendatei nicht gefunden.")
+                roundfile = get_input("Bitte gib den Pfad zur Rundendatei ein: ")
 
             while not check_access(roundfile, player_name):
                 print("Spielername bereits vergeben.")
