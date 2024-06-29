@@ -195,9 +195,18 @@ def display_bingo_cards(cards, player_name, game_won_event, game_aborted_event, 
 
         while not game_won_event.is_set() and not game_aborted_event.is_set():
             stdscr.clear()
-            stdscr.addstr("Spieler im Spiel:\n", curses.A_BOLD)
+            stdscr.addstr("Spieler im Spiel:", curses.A_BOLD)
             for player in players:
-                stdscr.addstr(f"{player}\n")
+                stdscr.addstr(f"{player},")
+            stdscr.addstr("\n")
+            stdscr.addstr("Rundenname:", curses.A_BOLD)
+            stdscr.addstr(f"{roundfile}")
+            stdscr.addstr("\n")
+            stdscr.addstr("\n")
+            stdscr.addstr("Um das Spiel zu verlassen drücke die `Esc`-Taste auf deinem Keyboard", curses.A_BOLD)
+            stdscr.addstr("\n")
+            stdscr.addstr("\n")
+            stdscr.addstr("\n")
             stdscr.addstr("\n")
 
             for row in range(len(cards)):
@@ -245,7 +254,7 @@ def display_bingo_cards(cards, player_name, game_won_event, game_aborted_event, 
             elif key == 27:  # Esc-Taste
                 log_message(log_file, "Abbruch")
                 for queue in all_player_queues:
-                    send_message(queue, "aborted")
+                    send_message(queue, "Game aborted: Ein Spieler hat das Spiel verlassen, Spiel wird abgebrochen")
                 game_aborted_event.set()
                 with open(roundfile, 'a') as f:
                     f.write("finished\n")
