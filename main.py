@@ -3,19 +3,17 @@ import random
 import logging
 import threading
 import curses
-from multiprocessing import Event
 import posix_ipc
 import time
+import argparse
 from datetime import datetime
 
-# Konfigurieren des Loggings für detaillierte Ausgaben
+# Configure logging for detailed outputs
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Funktion zum Löschen des Bildschirms, abhängig vom Betriebssystem
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-# Funktionen für den Umgang mit POSIX-Nachrichtenwarteschlangen
 def create_message_queue(name, max_message_size=1024):
     try:
         mq = posix_ipc.MessageQueue(name, flags=posix_ipc.O_CREAT, mode=0o666, max_message_size=max_message_size)
@@ -40,7 +38,6 @@ def send_message(mq, message):
 def receive_message(mq, message_size=1024):
     try:
         message, _ = mq.receive(message_size)
-        logging.debug(f"Message received: {message.decode()}")
         return message.decode()
     except Exception as e:
         logging.error(f"Error receiving message: {e}")
@@ -56,11 +53,13 @@ def cleanup_message_queue(mq, name):
 def wait_for_opponent(mq_name, start_event, init_mq):
     logging.debug("Waiting for opponent to join...")
     try:
-        message = receive_message(init_mq)
-        if message == 'start':
-            logging.debug("Start message received.")
-            start_event.set()
-            logging.debug("Start event set, opponent has joined.")
+        while True:
+            message = receive_message(init_mq)
+            if message == 'start':
+                logging.debug("Start message received.")
+                start_event.set()
+                logging.debug("Start event set, opponent has joined.")
+                break
     except Exception as e:
         logging.error(f"Error in wait_for_opponent: {e}")
 
@@ -69,9 +68,9 @@ def listen_for_messages(mq, game_won_event, player_queues, players):
         try:
             message = receive_message(mq)
             if message:
+                logging.debug(f"{message}")
                 if "won" in message:
                     game_won_event.set()
-                    logging.debug("Game won message received.")
                 elif "player joined" in message:
                     new_player = message.split(":")[1].strip()
                     if new_player not in players:
@@ -89,7 +88,7 @@ def start_message_listener(mq_name, game_won_event, player_queues, players):
 
 def create_bingo_card(height, width, words):
     try:
-        if len(words) < height * width - 1:  # subtract 1 for the Joker
+        if len(words) < height * width - 1:
             print("Not enough words in the word file.")
             return None
         random.shuffle(words)
@@ -102,7 +101,6 @@ def create_bingo_card(height, width, words):
                 else:
                     row.append(words.pop())
             card.append(row)
-
         return card
     except Exception as e:
         logging.error(f"Error creating bingo card: {e}")
@@ -118,30 +116,23 @@ def read_bingo_cards(roundfile):
                     height = int(line.split(":", 1)[1].strip())
                 elif line.startswith("Width:"):
                     width = int(line.split(":", 1)[1].strip())
-
             if height is None or width is None:
                 print("Height or width not found in the round file.")
                 return None
-
             wordfile = None
             for line in lines:
                 if line.startswith("Wordfile:"):
                     wordfile = line.split(":", 1)[1].strip()
                     break
-
             if wordfile is None:
                 print("Wordfile not found in the round file.")
                 return None
-
             with open(wordfile, 'r') as word_file:
                 words = [line.strip() for line in word_file.readlines()]
-
             if len(words) < height * width:
                 print("Not enough words in the word file.")
                 return None
-
             cards = create_bingo_card(height, width, words)
-
             return cards
     except Exception as e:
         logging.error(f"Error reading bingo cards: {e}")
@@ -157,7 +148,7 @@ def read_players_from_roundfile(roundfile):
         logging.error(f"Error reading players from round file: {e}")
         return []
 
-def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_queues, roundfile):
+def display_bingo_cards(cards, player_name, game_won_event, all_player_queues, roundfile):
     log_file = create_log_file(player_name)
     log_message(log_file, "Start des Spiels")
     log_message(log_file, f"Größe des Spielfelds: {len(cards[0])}x{len(cards)}")
@@ -179,7 +170,7 @@ def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_
 
         col_width = 15
         cursor_idx = (0, 0)
-        selected_indices = {(len(cards) // 2, len(cards[0]) // 2)} if len(cards) % 2 != 0 else set()  # include Joker if odd-sized card
+        selected_indices = {(len(cards) // 2, len(cards[0]) // 2)} if len(cards) % 2 != 0 else set()
 
         flicker = False
 
@@ -189,14 +180,11 @@ def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_
 
         while not game_won_event.is_set():
             stdscr.clear()
-
-            # Display player names
             stdscr.addstr("Players in the game:\n", curses.A_BOLD)
             for player in players:
                 stdscr.addstr(f"{player}\n")
-            stdscr.addstr("\n")  # Add an empty line for spacing
+            stdscr.addstr("\n")
 
-            # Draw the bingo card
             for row in range(len(cards)):
                 for col in range(len(cards[0])):
                     word = cards[row][col]
@@ -210,7 +198,6 @@ def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_
                         stdscr.addstr(f"| {word_to_display}{padding} ")
                 stdscr.addstr("|\n")
 
-                # Draw horizontal line between rows
                 if row < len(cards) - 1:
                     stdscr.addstr("+" + ("-" * (col_width + 2) + "+") * len(cards[0]) + "\n")
 
@@ -237,27 +224,27 @@ def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_
                         game_won_event.set()
                         log_message(log_file, "Sieg")
                         logging.debug("Game won, breaking display loop.")
+                        with open(roundfile, 'a') as f:
+                            f.write("finished\n")
                         break
             elif key == 27:  # Esc key
                 log_message(log_file, "Abbruch")
                 break
 
-        # Flicker the card when game is won
         flicker_start_time = time.time()
         while time.time() - flicker_start_time < 3:
             stdscr.clear()
             stdscr.addstr("Players in the game:\n", curses.A_BOLD)
             for player in players:
                 stdscr.addstr(f"{player}\n")
-            stdscr.addstr("\n")  # Add an empty line for spacing
+            stdscr.addstr("\n")
 
-            # Draw the bingo card with flickering effect
             for row in range(len(cards)):
                 for col in range(len(cards[0])):
                     word = cards[row][col]
                     word_to_display = word[:col_width]
                     padding = " " * (col_width - len(word_to_display))
-                    color_pair = 4 if flicker else 5  # Alternate between green and yellow
+                    color_pair = 4 if flicker else 5
                     if (row, col) == cursor_idx:
                         stdscr.addstr(f"| {word_to_display}{padding} ", curses.color_pair(color_pair))
                     elif (row, col) in selected_indices:
@@ -266,7 +253,6 @@ def display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_
                         stdscr.addstr(f"| {word_to_display}{padding} ")
                 stdscr.addstr("|\n")
 
-                # Draw horizontal line between rows
                 if row < len(cards) - 1:
                     stdscr.addstr("+" + ("-" * (col_width + 2) + "+") * len(cards[0]) + "\n")
 
@@ -310,6 +296,16 @@ def check_access(roundfile, player_name):
             print("Player name already taken.")
             return False
 
+        if any("finished" in line for line in players):
+            print("Game has already finished.")
+            return False
+
+        max_players = int([line.split(":")[1].strip() for line in players if line.startswith("Max")][0])
+        current_players = sum(1 for line in players if line.startswith("player:"))
+        if current_players >= max_players:
+            print("Maximum number of players reached.")
+            return False
+
         return True
     except Exception as e:
         logging.error(f"Error checking access: {e}")
@@ -336,110 +332,91 @@ def create_round_file(roundfile, height, width, wordfile, max_players):
         logging.error(f"Error creating round file: {e}")
         return False
 
+def create_log_file(player_name):
+    current_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    log_folder = os.path.join(os.getcwd(), 'logfiles')
+    os.makedirs(log_folder, exist_ok=True)
+    log_filename = f"{current_time}-bingo-{player_name}.txt"
+    log_filepath = os.path.join(log_folder, log_filename)
+    return log_filepath
+
+def log_message(log_filepath, message):
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_filepath, 'a') as log_file:
+        log_file.write(f"{current_time} {message}\n")
+
 def get_input(prompt, input_type=str, valid_range=None, valid_options=None):
     while True:
         try:
             user_input = input_type(input(prompt).strip())
             if valid_range and user_input not in valid_range:
                 raise ValueError(f"Input must be within range: {valid_range}")
-            if valid_options and user_input not in valid_options :
+            if valid_options and user_input not in valid_options:
                 raise ValueError(f"Input must be one of: {valid_options}")
             return user_input
         except ValueError as e:
             print(e)
 
-def create_game():
-    while True:
-        try:
-            roundfile = get_input("Please enter the name of the round file: ")
-            if os.path.exists(roundfile):
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Multiplayer Bingo Game")
+    parser.add_argument('action', type=str, choices=['create', 'join'], help='Action to perform: create or join a game')
+    parser.add_argument('roundfile', type=str, help='Name of the round file')
+    parser.add_argument('player_name', type=str, help='Name of the player')
+    parser.add_argument('-x', '--xaxis', type=int, help='Number of columns of the Bingo card (required for create)', required=False)
+    parser.add_argument('-y', '--yaxis', type=int, help='Number of rows of the Bingo card (required for create)', required=False)
+    parser.add_argument('-w', '--wordfile', type=str, help='Path to the word file (required for create)', required=False)
+    parser.add_argument('-m', '--max_players', type=int, help='Maximum number of players (required for create)', required=False)
+    return parser.parse_args()
+
+def main():
+    init_mq_name = "/init_queue"
+    init_mq = create_message_queue(init_mq_name, max_message_size=1024)
+    global game_won_event
+    game_won_event = threading.Event()
+
+    args = parse_arguments()
+
+    try:
+        print("Welcome to Multiplayer Bingo!")
+
+        if args.action == 'create':
+            if not all([args.xaxis, args.yaxis, args.wordfile, args.max_players]):
+                print("Creating a game requires --join or create --roundfile --player_name --xaxis, --yaxis, --wordfile, and --max_players arguments.")
+                return
+
+            if os.path.exists(args.roundfile):
                 print("A round file with this name already exists. Please choose a different name.")
-                continue
+                return
 
-            player_name = get_input("Please enter your player name: ")
+            height = args.yaxis
+            width = args.xaxis
+            wordfile = args.wordfile
+            max_players = args.max_players
+            player_name = args.player_name
+            roundfile = args.roundfile
 
-            height = get_input("Please enter the height of the bingo cards: ", int, valid_range=range(1, 101))
-            width = get_input("Please enter the width of the bingo cards: ", int, valid_range=range(1, 101))
-            wordfile = get_input("Please enter the name of the word file: ")
-            max_players = get_input("Please enter the maximum number of players: ", int, valid_range=range(2, 11))
+            while not os.path.exists(wordfile):
+                print(f"File not found: {wordfile}.")
+                choice = get_input("Would you like to enter the file path again (yes) or use the standard buzzwords file (no)? ", str, valid_options={"yes", "no"})
+                if choice == "yes":
+                    wordfile = get_input("Please enter the file path for your word file: ")
+                else:
+                    wordfile = "buzzwords"  # Replace with the path to your standard words file
+                    break
 
             if create_round_file(roundfile, height, width, wordfile, max_players):
                 with open(wordfile, 'r') as word_file:
                     words = [line.strip() for line in word_file.readlines()]
-                
+
                 if len(words) < height * width:
                     print(f"Not enough words in the word file.")
-                    continue
-                
+                    return
+
                 create_player(roundfile, player_name)
                 mq_name = "/mq_" + player_name
                 create_message_queue(mq_name)
-                return roundfile, mq_name, player_name
-            else:
-                print("Error creating the round file.")
-                return None, None, None
-        except Exception as e:
-            logging.error(f"Error creating game: {e}")
-            return None, None, None
-
-def join_game(init_mq_name):
-    try:
-        roundfile = get_input("Please enter the name of the round file: ")
-        player_name = get_input("Please enter your player name: ")
-
-        if not os.path.exists(roundfile):
-            print("Game not found.")
-            return None, None, None
-
-        if not check_access(roundfile, player_name):
-            return None, None, None
-
-        mq_name = "/mq_" + player_name
-        create_message_queue(mq_name)
-        create_player(roundfile, player_name)
-        
-        # Signal readiness
-        send_message(posix_ipc.MessageQueue(init_mq_name), 'start')
-        
-        # Notify other players about the new player
-        with open(roundfile, 'r') as f:
-            player_queues = [line.split(":")[1].strip() for line in f if line.startswith("player:")]
-        for queue_name in player_queues:
-            send_message(create_message_queue(f"/mq_{queue_name}"), f"player joined: {player_name}")
-        
-        return roundfile, mq_name, player_name
-    except Exception as e:
-        logging.error(f"Error joining game: {e}")
-        return None, None, None
-
-def create_log_file(player_name):
-    current_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    log_folder = os.path.join(os.getcwd(), 'logfiles')
-    os.makedirs(log_folder, exist_ok=True)  # Avoid error if directory already exists
-    log_filename = f"{current_time}-bingo-{player_name}.txt"
-    log_filepath = os.path.join(log_folder, log_filename)
-    return log_filepath
-
-def log_message(log_filepath, message):
-    current_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    with open(log_filepath, 'a') as log_file:
-        log_file.write(f"{current_time} {message}\n")
-
-def main():
-    init_mq_name = "/init_queue"  # Common initialization queue
-    init_mq = create_message_queue(init_mq_name, max_message_size=1024)  # Create it here for global usage
-    global game_won_event
-    game_won_event = threading.Event()
-
-    try:
-        print("Welcome to Multiplayer Bingo!")
-        choice = get_input("Would you like to create a game (1) or join a game (2)? ", int, valid_options={1, 2})
-
-        if choice == 1:
-            roundfile, mq_name, player_name = create_game()
-            if roundfile:
                 print("Waiting for another player to join...")
-                start_event = Event()
+                start_event = threading.Event()
                 wait_thread = threading.Thread(target=wait_for_opponent, args=(mq_name, start_event, init_mq))
                 wait_thread.start()
                 start_event.wait()
@@ -451,29 +428,39 @@ def main():
                         player_queues = [line.split(":")[1].strip() for line in f if line.startswith("player:")]
                     all_player_queues = [create_message_queue(f"/mq_{name}") for name in player_queues]
                     start_message_listener(mq_name, game_won_event, all_player_queues, player_queues)
-                    display_bingo_cards(cards, init_mq_name, player_name, game_won_event, all_player_queues, roundfile)
-                    
+                    display_bingo_cards(cards, player_name, game_won_event, all_player_queues, roundfile)
 
-        elif choice == 2:
-            roundfile, mq_name, player_name = join_game(init_mq_name)
-            if roundfile:
-                cards = read_bingo_cards(roundfile)
-                if cards:
-                    with open(roundfile, 'r') as f:
-                        player_queues = [line.split(":")[1].strip() for line in f if line.startswith("player:")]
-                    all_player_queues = [create_message_queue(f"/mq_{name}") for name in player_queues]
-                    start_message_listener(mq_name, game_won_event, all_player_queues, player_queues)
-                    display_bingo_cards(cards, mq_name, player_name, game_won_event, all_player_queues, roundfile) 
+        elif args.action == 'join':
+            roundfile = args.roundfile
+            player_name = args.player_name
+
+            if not os.path.exists(roundfile):
+                print("Game not found.")
+                return
+
+            if not check_access(roundfile, player_name):
+                return
+
+            mq_name = "/mq_" + player_name
+            create_message_queue(mq_name)
+            create_player(roundfile, player_name)
+            send_message(posix_ipc.MessageQueue(init_mq_name), 'start')
+            with open(roundfile, 'r') as f:
+                player_queues = [line.split(":")[1].strip() for line in f if line.startswith("player:")]
+            for queue_name in player_queues:
+                send_message(create_message_queue(f"/mq_{queue_name}"), f"player joined: {player_name}")
+            cards = read_bingo_cards(roundfile)
+            if cards:
+                all_player_queues = [create_message_queue(f"/mq_{name}") for name in player_queues]
+                start_message_listener(mq_name, game_won_event, all_player_queues, player_queues)
+                display_bingo_cards(cards, player_name, game_won_event, all_player_queues, roundfile)
         else:
-            print("Invalid choice.")
-            return
-
-        if roundfile is None:
+            print("Invalid action.")
             return
     except Exception as e:
         logging.error(f"Error in main function: {e}")
     finally:
         pass
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     main()
