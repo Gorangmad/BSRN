@@ -479,6 +479,12 @@ def main():
                     start_message_listener(mq_name, game_won_event, game_aborted_event, all_player_queues, player_queues, create_log_file(player_name))
                     display_bingo_cards(cards, player_name, game_won_event, game_aborted_event, all_player_queues, roundfile)
 
+                    # Clean up message queues
+                    for queue_name in player_queues:
+                        cleanup_message_queue(create_message_queue(f"/mq_{queue_name}"), f"/mq_{queue_name}")
+                    cleanup_message_queue(init_mq, init_mq_name)
+                    cleanup_message_queue(create_message_queue(mq_name), mq_name)
+
         elif args.action == 'join':
             roundfile = args.roundfile
             player_name = args.player_name
@@ -504,6 +510,13 @@ def main():
                 all_player_queues = [create_message_queue(f"/mq_{name}") for name in player_queues]
                 start_message_listener(mq_name, game_won_event, game_aborted_event, all_player_queues, player_queues, create_log_file(player_name))
                 display_bingo_cards(cards, player_name, game_won_event, game_aborted_event, all_player_queues, roundfile)
+
+                # Clean up message queues
+                for queue_name in player_queues:
+                    cleanup_message_queue(create_message_queue(f"/mq_{queue_name}"), f"/mq_{queue_name}")
+                cleanup_message_queue(init_mq, init_mq_name)
+                cleanup_message_queue(create_message_queue(mq_name), mq_name)
+
         else:
             print("Ungültige Aktion.")
             return
